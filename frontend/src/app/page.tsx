@@ -88,7 +88,7 @@ export default function Home() {
     setLoading(true);
     setResp(null);
     try {
-      const res = await fetch("http://localhost:8000/run-agent", {
+      const res = await fetch("https://fire-reach.onrender.com/run-agent", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ icp, company, email }),
