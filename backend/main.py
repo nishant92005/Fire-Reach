@@ -5,12 +5,12 @@ from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
 
-from .modules.signal_harvester import harvest_signals
-from .modules.research_analyst import generate_account_brief, generate_outreach_email, generate_outreach_email_variant
-from .modules.email_sender import send_email
-from .modules.signal_harvester import _newsapi as dbg_newsapi
-from .modules.signal_harvester import _serper as dbg_serper
-from .modules.signal_harvester import _serpapi as dbg_serpapi
+from modules.signal_harvester import harvest_signals
+from modules.research_analyst import generate_account_brief, generate_outreach_email, generate_outreach_email_variant
+from modules.email_sender import send_email
+from modules.signal_harvester import _newsapi as dbg_newsapi
+from modules.signal_harvester import _serper as dbg_serper
+from modules.signal_harvester import _serpapi as dbg_serpapi
 import urllib.request
 import json
 
