@@ -1,89 +1,87 @@
 # FireReach
 
-FireReach ek AI-powered outreach project hai jo kisi target company ke baare mein public web signals collect karta hai, un signals ko summarize karta hai, personalized outreach email draft karta hai, aur user review ke baad email send bhi kar sakta hai.
+FireReach is an AI-powered outreach project that collects public company signals, summarizes them, generates a personalized outreach email, and lets the user review and send that email.
 
-Ye project do parts mein bana hai:
+The project has two main parts:
 
-- `backend/`: FastAPI backend jo APIs, signal harvesting, AI research, email drafting aur SMTP sending handle karta hai
-- `frontend/`: Next.js frontend jahan user ICP, company aur email details dekar poora workflow chala sakta hai
+- `backend/`: FastAPI backend for APIs, signal harvesting, AI research, email drafting, and SMTP sending
+- `frontend/`: Next.js frontend where the user runs the workflow from a web interface
 
-## Project ka simple idea
+## What This Project Does
 
-Maan lo aap kisi B2B company ko outreach bhejna chahte ho. Normally aapko:
+Imagine you want to send outreach to a target company. Normally you would have to:
 
-- company research karni padti hai
-- recent funding ya hiring news dekhni padti hai
-- phir personalized email likhna padta hai
-- phir usse send karna padta hai
+- research the company
+- check recent funding, hiring, or launch updates
+- write a personalized email
+- send it manually
 
-FireReach is process ko ek guided workflow mein laata hai:
+FireReach brings this flow into one guided pipeline:
 
-1. User ICP aur company ka naam deta hai
-2. Backend web se relevant signals dhoondhta hai
-3. Groq LLM un signals se company brief banata hai
-4. Personalized email generate hoti hai
-5. User chahe to email edit karke send karta hai
+1. The user enters an ICP and a company name
+2. The backend collects relevant public signals
+3. Groq generates a short company brief
+4. A personalized outreach email is drafted
+5. The user can review, edit, and send the email
 
-## Main features
+## Main Features
 
 - Live signal harvesting from News API, Serper, and SerpAPI
 - AI-generated account brief using Groq
 - Personalized outreach email generation
-- Manual review before sending email
+- Manual review before email sending
 - Gmail SMTP based email delivery
 - Hunter.io based contact extraction
-- Clean step-by-step UI
+- Clean step-by-step frontend workflow
 
-## Full workflow
+## Full Workflow
 
-### 1. User input
+### 1. User Input
 
-Frontend user se ye input leta hai:
+The frontend collects:
 
 - ICP (Ideal Customer Profile)
 - target company name
-- target email ya guessed company email
+- target email or guessed company email
 
-### 2. Signal harvesting
+### 2. Signal Harvesting
 
-Backend company ke liye public signals collect karta hai:
+The backend gathers public signals such as:
 
-- funding related news
-- hiring updates
+- funding news
+- hiring activity
 - product launches
 - technology changes
-- general market mentions
+- general public mentions
 
-Signals ko deduplicate bhi kiya jata hai aur relevance ke hisaab se filter kiya jata hai.
+Signals are also deduplicated and filtered for relevance.
 
-### 3. Research summary
+### 3. Research Summary
 
-Collected signals ko Groq LLM ko diya jata hai, jisse ek short account brief banta hai. Ye brief company ki current stage, direction aur possible pain points ko explain karta hai.
+The collected signals are sent to Groq, which produces a short account brief describing the company’s current stage, direction, and likely pain points.
 
-### 4. Outreach email generation
+### 4. Outreach Email Generation
 
-Brief aur signals ke base par ek outreach email banayi jati hai jo:
+Using the brief and the signals, the system creates an outreach email that is:
 
-- company-specific hoti hai
-- recent signals ko reference karti hai
-- short aur professional tone mein hoti hai
-- clear CTA rakhti hai
+- company-specific
+- based on recent events or signals
+- short and professional
+- focused on one clear call to action
 
-### 5. Email review and send
+### 5. Review and Send
 
-User generated email ko frontend mein dekh sakta hai:
+The user can:
 
-- direct send
-- pehle edit kare
-- phir send kare
+- view the generated email
+- edit it if needed
+- send it through Gmail SMTP
 
-Email Gmail SMTP ke through bheji jati hai.
+### 6. Contact Extraction
 
-### 6. Contact extraction
+The user can also extract company contacts using Hunter.io.
 
-User alag se company contacts bhi fetch kar sakta hai. Iske liye backend Hunter.io API use karta hai.
-
-## Tech stack
+## Tech Stack
 
 ### Frontend
 
@@ -97,10 +95,10 @@ User alag se company contacts bhi fetch kar sakta hai. Iske liye backend Hunter.
 - FastAPI
 - Pydantic
 - python-dotenv
-- standard library `urllib`
+- Python standard library `urllib`
 - SMTP via `smtplib`
 
-### External services
+### External Services
 
 - Groq
 - News API
@@ -109,7 +107,7 @@ User alag se company contacts bhi fetch kar sakta hai. Iske liye backend Hunter.
 - Hunter.io
 - Gmail SMTP
 
-## Folder structure
+## Project Structure
 
 ```text
 Fire-Reach-main/
@@ -131,26 +129,24 @@ Fire-Reach-main/
 └─ README.md
 ```
 
-## Important backend files
+## Important Backend Files
 
 ### `backend/main.py`
 
-Ye main FastAPI app hai. Ismein:
+This is the main FastAPI app. It handles:
 
-- API endpoints defined hain
-- signal harvesting flow call hota hai
-- brief aur email generation trigger hota hai
-- email sending handle hota hai
-- Hunter.io contact extraction hota hai
+- API endpoint definitions
+- signal harvesting flow
+- brief and email generation
+- email sending
+- Hunter.io contact extraction
 
 ### `backend/modules/signal_harvester.py`
 
-Ye module public web sources se signals collect karta hai.
+This module is responsible for:
 
-Responsibilities:
-
-- News API fetch
-- Serper fetch
+- News API fetching
+- Serper fetching
 - SerpAPI fallback
 - signal classification
 - deduplication
@@ -158,65 +154,65 @@ Responsibilities:
 
 ### `backend/modules/research_analyst.py`
 
-Ye Groq ke through:
+This module uses Groq to:
 
-- account brief generate karta hai
-- outreach email generate karta hai
-- fallback text bhi deta hai agar LLM call fail ho jaye
+- generate the account brief
+- generate the outreach email
+- provide fallback output if an LLM request fails
 
 ### `backend/modules/email_sender.py`
 
-Ye Gmail SMTP use karke email send karta hai. Ab ismein sensitive values ko logs mein expose nahi kiya jata.
+This module sends email through Gmail SMTP. Sensitive values are no longer exposed in logs.
 
 ### `backend/test_email.py`
 
-Ye local diagnostic script hai jo email setup validate karne mein help karta hai.
+This is a small diagnostic script that helps validate local email configuration.
 
-## Important frontend files
+## Important Frontend Files
 
 ### `frontend/src/app/page.tsx`
 
-Main UI yahin hai. User:
+This is the main UI. The user can:
 
-- ICP enter karta hai
-- company name deta hai
-- email run karta hai
-- contacts extract karta hai
-- generated email ko edit/send karta hai
+- enter the ICP
+- enter the company name
+- run the agent workflow
+- extract contacts
+- edit and send the generated email
 
 ### `frontend/src/app/layout.tsx`
 
-App metadata aur root layout define karta hai.
+Defines root layout and metadata.
 
 ### `frontend/src/app/globals.css`
 
-Global CSS variables aur base styling rakhta hai.
+Contains global CSS variables and base styling.
 
-## API endpoints
+## API Endpoints
 
-### Main endpoints
+### Main Endpoints
 
 - `POST /run-agent`
-  Purpose: signal collection + brief generation + email draft generation
+  Purpose: collect signals, generate brief, and generate outreach email
 
 - `POST /send-email`
-  Purpose: reviewed/edited email send karna
+  Purpose: send the reviewed or edited email
 
 - `GET /extract-contacts?company=...`
-  Purpose: Hunter.io se company contacts nikalna
+  Purpose: fetch company contacts from Hunter.io
 
-### Debug endpoints
+### Debug Endpoints
 
-Project mein debug endpoints bhi hain, lekin ab wo default se disabled hain. Unko enable karne ke liye backend env mein `FIRE_REACH_ENABLE_DEBUG=true` set karna padega.
+The project also includes debug endpoints, but they are now disabled by default. To enable them, set `FIRE_REACH_ENABLE_DEBUG=true` in the backend environment.
 
-## Environment variables
+## Environment Variables
 
-Secrets ko repo mein directly store nahi karna chahiye. Isliye example files add ki gayi hain:
+Secrets should never be stored directly in the repository. Example files are included:
 
 - `backend/.env.example`
 - `frontend/.env.local.example`
 
-### Backend env variables
+### Backend Environment Variables
 
 - `GROQ_API_KEY`
 - `GROQ_MODEL`
@@ -229,13 +225,13 @@ Secrets ko repo mein directly store nahi karna chahiye. Isliye example files add
 - `FIRE_REACH_ENV`
 - `FIRE_REACH_ENABLE_DEBUG`
 
-### Frontend env variables
+### Frontend Environment Variables
 
 - `NEXT_PUBLIC_API_BASE_URL`
 
-## Local setup
+## Local Setup
 
-### Backend setup
+### Backend Setup
 
 ```powershell
 cd backend
@@ -244,84 +240,84 @@ python -m venv .venv
 pip install -r requirements.txt
 ```
 
-`backend/.env.example` ko dekhkar apna real `backend/.env` banao.
+Use `backend/.env.example` as a reference and create your real `backend/.env`.
 
-Backend run karne ke liye:
+To run the backend:
 
 ```powershell
 uvicorn main:app --reload --port 8000
 ```
 
-### Frontend setup
+### Frontend Setup
 
 ```powershell
 cd frontend
 npm install
 ```
 
-`frontend/.env.local.example` ko copy karke `frontend/.env.local` banao aur API base URL set karo.
+Use `frontend/.env.local.example` as a reference and create `frontend/.env.local`.
 
-Frontend run karne ke liye:
+To run the frontend:
 
 ```powershell
 npm run dev
 ```
 
-Frontend by default `http://localhost:3000` par chalega.
+The frontend will normally run on `http://localhost:3000`.
 
-## How to use the app
+## How To Use The App
 
-1. Backend start karo
-2. Frontend start karo
-3. Browser mein frontend kholo
-4. ICP likho
-5. Company name do
-6. Apna email do ya guessed company email choose karo
-7. `Run Agent` click karo
-8. Signals, research brief aur generated email dekho
-9. Email edit karo agar zarurat ho
-10. `Send Email` click karo
+1. Start the backend
+2. Start the frontend
+3. Open the frontend in the browser
+4. Enter the ICP
+5. Enter the company name
+6. Enter your own email or choose the guessed company email
+7. Click `Run Agent`
+8. Review the detected signals, company brief, and generated email
+9. Edit the email if needed
+10. Click `Send Email`
 
-## Security improvements already applied
+## Security Improvements Already Applied
 
-Project ko push aur share karne se pehle ye important changes kiye gaye:
+Before pushing and sharing the repository, the following improvements were made:
 
-- `.gitignore` ko clean kiya gaya
-- `.env` files ko ignore kiya gaya
-- `node_modules`, logs, cache, `.venv` ko ignore kiya gaya
-- example env files add ki gayi
-- frontend API URL ko env-based banaya gaya
-- sensitive SMTP logs ko reduce kiya gaya
-- debug endpoints ko default se disable kiya gaya
+- cleaned up `.gitignore`
+- ignored `.env` files
+- ignored `node_modules`, logs, caches, and virtual environments
+- added example environment files
+- made frontend API URL configurable through environment variables
+- reduced sensitive SMTP logging
+- disabled debug endpoints by default
 
-## Remaining practical security advice
+## Remaining Security Advice
 
-Push karne se pehle ye check zarur karo:
+Before deploying publicly, still make sure that:
 
-- real `.env` file repo mein na ho
-- API keys screenshot ya logs mein na ho
-- Gmail app password hi use ho, personal password nahi
-- production mein debug endpoints off rakho
-- CORS origins ko deployment domains ke hisaab se review karo
+- real `.env` files are never committed
+- API keys never appear in screenshots or logs
+- Gmail app passwords are used instead of the main account password
+- debug endpoints remain disabled in production
+- CORS origins are reviewed for actual deployment domains
 
-## Known limitations
+## Known Limitations
 
-- Company domain guessing simple heuristic par based hai, isliye har company ke liye perfect nahi hoga
-- Contact extraction Hunter.io response quality par depend karta hai
-- Signal quality external APIs par depend karti hai
-- Email personalization LLM output quality par depend karti hai
-- Backend mein proper auth/rate-limit abhi nahi hai, isliye public internet exposure se pehle aur hardening karni chahiye
+- Company domain guessing is heuristic-based and may not always be correct
+- Contact extraction depends on Hunter.io response quality
+- Signal quality depends on third-party APIs
+- Email personalization depends on LLM output quality
+- The backend still does not include full authentication or rate limiting
 
-## Suggested next improvements
+## Suggested Next Improvements
 
-- backend authentication add karna
-- rate limiting add karna
-- input validation aur sanitization aur strong karna
-- email templates ko modular banana
-- database-based history add karna
-- deployment config document karna
-- automated tests add karna
+- add backend authentication
+- add rate limiting
+- improve input validation and sanitization
+- modularize email templates
+- add database-backed history
+- document deployment steps
+- add automated tests
 
 ## Summary
 
-FireReach ek practical outreach automation tool hai jo research, signal detection, AI summary aur personalized email drafting ko ek single flow mein laata hai. Ye especially sales, outbound, lead research, aur founder-led outreach use cases ke liye useful ho sakta hai.
+FireReach is a practical outreach automation tool that combines company research, signal detection, AI summarization, and personalized email drafting into a single workflow. It is especially useful for outbound sales, lead research, and founder-led outreach use cases.
