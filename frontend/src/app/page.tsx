@@ -2,6 +2,8 @@
 
 import { useEffect, useState } from "react";
 
+const API_BASE_URL = process.env.NEXT_PUBLIC_API_BASE_URL || "http://localhost:8000";
+
 type Signal = {
   type: string;
   title: string;
@@ -16,6 +18,29 @@ type AgentResponse = {
   email: string;
   email_delivery_status: string;
   email_id?: string | null;
+  recipient: string;
+  company_email?: string | null;
+};
+
+type Contact = {
+  email?: string;
+  first_name?: string;
+  last_name?: string;
+  full_name?: string;
+  title?: string;
+  department?: string;
+  seniority?: string;
+  linkedin_url?: string;
+  twitter_url?: string;
+  phone_number?: string;
+  score?: number;
+};
+
+type ExtractContactsResponse = {
+  domain: string;
+  contacts: Contact[];
+  total_count: number;
+  company: string;
 };
 
 const STEPS = [
@@ -40,21 +65,33 @@ const STEPS = [
   {
     id: 4,
     title: "Email Delivery Status",
-    description: "Sent automatically via Resend.",
+    description: "Send the email when ready.",
     key: "email_delivery_status",
   },
 ] as const;
 
 type StepKey = (typeof STEPS)[number]["key"];
 
+function getErrorMessage(error: unknown, fallback: string): string {
+  return error instanceof Error ? error.message : fallback;
+}
+
 export default function Home() {
   const [icp, setIcp] = useState("");
   const [company, setCompany] = useState("");
   const [email, setEmail] = useState("");
+  const [useCompanyEmail, setUseCompanyEmail] = useState(false);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [resp, setResp] = useState<AgentResponse | null>(null);
   const [theme, setTheme] = useState<"light" | "dark">("light");
+  const [companyEmailConfirmed, setCompanyEmailConfirmed] = useState(false);
+  const [extractingContacts, setExtractingContacts] = useState(false);
+  const [contactsError, setContactsError] = useState<string | null>(null);
+  const [contactsResp, setContactsResp] = useState<ExtractContactsResponse | null>(null);
+  const [isEditingEmail, setIsEditingEmail] = useState(false);
+  const [editedEmailContent, setEditedEmailContent] = useState("");
+  const [sendingEmail, setSendingEmail] = useState(false);
 
   useEffect(() => {
     const root = document.documentElement;
@@ -64,6 +101,15 @@ export default function Home() {
       root.classList.remove("dark");
     }
   }, [theme]);
+
+  const guessedCompanyEmail = (() => {
+    const normalized = company.trim().toLowerCase().replace(/[^a-z0-9]/g, "");
+    return normalized ? `contact@${normalized}.com` : "";
+  })();
+
+  useEffect(() => {
+    setCompanyEmailConfirmed(false);
+  }, [company, useCompanyEmail]);
 
   const hasResponse = Boolean(resp);
 
@@ -79,19 +125,24 @@ export default function Home() {
     if (key === "signals" && resp.signals?.length > 0) return "done";
     if (key === "brief" && resp.brief) return "done";
     if (key === "email" && resp.email) return "done";
-    if (key === "email_delivery_status" && resp.email_delivery_status) return "done";
+    if (key === "email_delivery_status" && resp.email_delivery_status === "sent") return "done";
     return "pending";
   }
 
-  async function runAgent() {
+  async function runAgent(forceConfirm = false) {
+    if (useCompanyEmail && !companyEmailConfirmed && !forceConfirm) {
+      setError("Please confirm sending to the guessed company email before running the agent.");
+      return;
+    }
+
     setError(null);
     setLoading(true);
     setResp(null);
     try {
-      const res = await fetch("https://fire-reach.onrender.com/run-agent", {
+      const res = await fetch(`${API_BASE_URL}/run-agent`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ icp, company, email }),
+        body: JSON.stringify({ icp, company, email: useCompanyEmail ? null : email, use_company_email: useCompanyEmail }),
       });
       if (!res.ok) {
         const text = await res.text();
@@ -99,10 +150,81 @@ export default function Home() {
       }
       const data: AgentResponse = await res.json();
       setResp(data);
-    } catch (e: any) {
-      setError(e?.message || "Unexpected error");
+    } catch (error: unknown) {
+      setError(getErrorMessage(error, "Unexpected error"));
     } finally {
       setLoading(false);
+    }
+  }
+
+  async function confirmCompanySend() {
+    setCompanyEmailConfirmed(true);
+    await runAgent(true);
+  }
+
+  async function extractContacts() {
+    if (!company) {
+      setContactsError("Please enter a company name");
+      return;
+    }
+
+    setContactsError(null);
+    setExtractingContacts(true);
+    setContactsResp(null);
+    try {
+      const res = await fetch(`${API_BASE_URL}/extract-contacts?` + new URLSearchParams({ company }), {
+        method: "GET",
+        headers: { "Content-Type": "application/json" },
+      });
+      if (!res.ok) {
+        const text = await res.text();
+        throw new Error(text || "Failed to extract contacts");
+      }
+      const data: ExtractContactsResponse = await res.json();
+      setContactsResp(data);
+    } catch (error: unknown) {
+      setContactsError(getErrorMessage(error, "Failed to extract contacts"));
+    } finally {
+      setExtractingContacts(false);
+    }
+  }
+
+  async function sendEmail() {
+    if (!resp || !resp.recipient) {
+      setError("Error: Missing recipient email");
+      return;
+    }
+
+    setSendingEmail(true);
+    setError(null);
+    try {
+      const emailContent = isEditingEmail ? editedEmailContent : resp.email;
+      const res = await fetch(`${API_BASE_URL}/send-email`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          recipient: resp.recipient,
+          subject: `${company} <> FireReach`,
+          email_content: emailContent,
+        }),
+      });
+      if (!res.ok) {
+        const text = await res.text();
+        throw new Error(text || "Failed to send email");
+      }
+      const data = await res.json();
+      // Update response with delivery status
+      setResp({
+        ...resp,
+        email_delivery_status: data.status,
+        email_id: data.email_id,
+      });
+      setIsEditingEmail(false);
+      setEditedEmailContent("");
+    } catch (error: unknown) {
+      setError(getErrorMessage(error, "Failed to send email"));
+    } finally {
+      setSendingEmail(false);
     }
   }
 
@@ -189,14 +311,84 @@ export default function Home() {
                     value={email}
                     onChange={(e) => setEmail(e.target.value)}
                     placeholder="founder@acme.com"
-                    className="w-full rounded-2xl border border-zinc-200 bg-white/70 p-3 text-sm outline-none ring-orange-500/0 transition focus:border-orange-500 focus:ring-2 dark:border-zinc-700 dark:bg-zinc-950/70"
+                    disabled={useCompanyEmail}
+                    className="w-full rounded-2xl border border-zinc-200 bg-white/70 p-3 text-sm outline-none ring-orange-500/0 transition focus:border-orange-500 focus:ring-2 disabled:cursor-not-allowed disabled:opacity-60 dark:border-zinc-700 dark:bg-zinc-950/70"
                   />
+                  <div className="mt-3 flex flex-col gap-2 text-sm text-zinc-600 dark:text-zinc-400">
+                    <label className="inline-flex items-center gap-2">
+                      <input
+                        type="radio"
+                        checked={!useCompanyEmail}
+                        onChange={() => {
+                          setUseCompanyEmail(false);
+                          setCompanyEmailConfirmed(false);
+                        }}
+                      />
+                      Send to my email
+                    </label>
+                    <label className="inline-flex items-center gap-2">
+                      <input
+                        type="radio"
+                        checked={useCompanyEmail}
+                        onChange={() => {
+                          setUseCompanyEmail(true);
+                          setCompanyEmailConfirmed(false);
+                        }}
+                      />
+                      Use company email
+                    </label>
+                    {useCompanyEmail ? (
+                      <span className="text-xs text-zinc-500 dark:text-zinc-400">
+                        FireReach will guess a company contact address using the company domain and detected signals.
+                      </span>
+                    ) : null}
+                  </div>
                 </div>
               </div>
 
+              {useCompanyEmail && company ? (
+                <div className="mt-4 rounded-2xl border border-orange-200/80 bg-orange-50/80 p-4 text-sm text-orange-900 shadow-sm dark:border-orange-500/30 dark:bg-orange-950/10 dark:text-orange-200">
+                  <p className="mb-3 font-medium">Guessed company email:</p>
+                  <p className="break-all text-sm font-semibold text-zinc-900 dark:text-zinc-100">
+                    {guessedCompanyEmail}
+                  </p>
+                  {!companyEmailConfirmed ? (
+                    <div className="mt-3 flex flex-col gap-3 sm:flex-row">
+                      <button
+                        type="button"
+                        onClick={confirmCompanySend}
+                        className="inline-flex items-center justify-center rounded-2xl bg-emerald-500 px-4 py-2 text-sm font-medium text-white shadow-sm transition hover:bg-emerald-600"
+                      >
+                        Yes, send to this address
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setUseCompanyEmail(false);
+                          setCompanyEmailConfirmed(false);
+                        }}
+                        className="inline-flex items-center justify-center rounded-2xl border border-orange-300 bg-white px-4 py-2 text-sm font-medium text-orange-600 shadow-sm transition hover:bg-orange-100 dark:bg-zinc-900 dark:text-orange-300"
+                      >
+                        No, use my own email
+                      </button>
+                    </div>
+                  ) : (
+                    <p className="mt-3 text-sm text-emerald-700 dark:text-emerald-300">
+                      Confirmed. Click Run Agent to send to the guessed company email.
+                    </p>
+                  )}
+                </div>
+              ) : null}
+
               <button
-                disabled={loading || !icp || !company || !email}
-                onClick={runAgent}
+                disabled={
+                  loading ||
+                  !icp ||
+                  !company ||
+                  (!useCompanyEmail && !email) ||
+                  (useCompanyEmail && !companyEmailConfirmed)
+                }
+                onClick={() => runAgent()}
                 className="group relative mt-3 inline-flex w-full items-center justify-center overflow-hidden rounded-2xl bg-gradient-to-r from-orange-500 via-red-500 to-amber-400 px-4 py-3 text-sm font-medium text-white shadow-lg shadow-orange-500/40 transition hover:brightness-110 disabled:cursor-not-allowed disabled:opacity-60"
               >
                 <span className="absolute inset-0 opacity-0 transition group-hover:opacity-30">
@@ -217,15 +409,44 @@ export default function Home() {
                 )}
               </button>
 
+              <button
+                disabled={!company || extractingContacts}
+                onClick={() => extractContacts()}
+                className="group relative mt-3 inline-flex w-full items-center justify-center overflow-hidden rounded-2xl bg-gradient-to-r from-blue-500 via-purple-500 to-indigo-400 px-4 py-3 text-sm font-medium text-white shadow-lg shadow-blue-500/40 transition hover:brightness-110 disabled:cursor-not-allowed disabled:opacity-60"
+              >
+                <span className="absolute inset-0 opacity-0 transition group-hover:opacity-30">
+                  <span className="absolute inset-x-10 top-0 h-px bg-gradient-to-r from-transparent via-white to-transparent" />
+                </span>
+                {extractingContacts ? (
+                  <span className="relative flex items-center gap-2">
+                    <span className="inline-block h-4 w-4 animate-spin rounded-full border-2 border-white/60 border-t-transparent" />
+                    Extracting Contacts
+                  </span>
+                ) : (
+                  <span className="relative flex items-center gap-2">
+                    <span className="inline-flex h-5 w-5 items-center justify-center rounded-full bg-white/20 text-[11px]">
+                      👥
+                    </span>
+                    Extract Company Contacts
+                  </span>
+                )}
+              </button>
+
               {error && (
                 <p className="mt-2 text-sm text-red-600 dark:text-red-400">
                   {error}
                 </p>
               )}
 
+              {contactsError && (
+                <p className="mt-2 text-sm text-red-600 dark:text-red-400">
+                  {contactsError}
+                </p>
+              )}
+
               <p className="mt-2 text-[11px] text-zinc-500">
                 FireReach reads deterministic web signals (News API, Serper/SerpAPI) and uses Groq-powered LLM reasoning
-                to craft outreach before sending via Resend.
+                to craft outreach before sending via SMTP.
               </p>
             </div>
           </div>
@@ -282,6 +503,74 @@ export default function Home() {
 
         <section className="grid gap-6 lg:grid-cols-[minmax(0,1.1fr)_minmax(0,0.9fr)]">
           <div className="space-y-4">
+            {contactsResp && (
+              <div className="rounded-2xl border border-blue-200/80 bg-white/90 p-4 text-sm shadow-sm backdrop-blur dark:border-blue-800/80 dark:bg-zinc-950/80">
+                <div className="mb-4 flex items-center justify-between">
+                  <div>
+                    <h3 className="text-xs font-semibold uppercase tracking-[0.16em] text-blue-600 dark:text-blue-400">
+                      Company Contacts Extracted
+                    </h3>
+                    <p className="mt-1 text-xs text-zinc-600 dark:text-zinc-400">
+                      Found {contactsResp.total_count} contacts from {contactsResp.company}
+                    </p>
+                  </div>
+                </div>
+                <div className="space-y-3 max-h-96 overflow-y-auto">
+                  {contactsResp.contacts && contactsResp.contacts.length > 0 ? (
+                    contactsResp.contacts.map((contact, i) => (
+                      <div
+                        key={i}
+                        className="rounded-xl border border-blue-200/50 bg-blue-50/50 p-3 dark:border-blue-800/50 dark:bg-blue-950/20"
+                      >
+                        <div className="flex items-start justify-between gap-2">
+                          <div className="flex-1 min-w-0">
+                            <p className="text-xs font-semibold text-zinc-900 dark:text-zinc-100">
+                              {contact.full_name || contact.first_name || "Unknown"}
+                            </p>
+                            {contact.title && (
+                              <p className="text-xs text-zinc-700 dark:text-zinc-300">
+                                {contact.title}
+                              </p>
+                            )}
+                            {contact.department && (
+                              <p className="text-xs text-zinc-600 dark:text-zinc-400">
+                                {contact.department}
+                              </p>
+                            )}
+                            {contact.email && (
+                              <p className="mt-2 text-xs break-all">
+                                <span className="text-zinc-600 dark:text-zinc-400">Email: </span>
+                                <a
+                                  href={`mailto:${contact.email}`}
+                                  className="font-mono text-blue-600 underline dark:text-blue-400"
+                                >
+                                  {contact.email}
+                                </a>
+                              </p>
+                            )}
+                            {contact.phone_number && (
+                              <p className="text-xs text-zinc-600 dark:text-zinc-400">
+                                Phone: {contact.phone_number}
+                              </p>
+                            )}
+                            {contact.seniority && (
+                              <p className="mt-1 inline-flex items-center rounded-full bg-blue-500/10 px-2 py-0.5 text-[10px] font-medium text-blue-600 dark:text-blue-400">
+                                {contact.seniority}
+                              </p>
+                            )}
+                          </div>
+                        </div>
+                      </div>
+                    ))
+                  ) : (
+                    <p className="text-xs text-zinc-600 dark:text-zinc-400">
+                      No contacts found for this company.
+                    </p>
+                  )}
+                </div>
+              </div>
+            )}
+            
             <div className="rounded-2xl border border-zinc-200/80 bg-white/90 p-4 text-sm shadow-sm backdrop-blur dark:border-zinc-800/80 dark:bg-zinc-950/80">
               <div className="mb-2 flex items-center justify-between">
                 <h3 className="text-xs font-semibold uppercase tracking-[0.16em] text-zinc-500">
@@ -360,9 +649,85 @@ export default function Home() {
                 )}
               </div>
               {resp?.email ? (
-                <pre className="max-h-80 overflow-auto whitespace-pre-wrap rounded-xl bg-zinc-50/90 p-3 text-xs leading-6 text-zinc-800 shadow-inner dark:bg-zinc-900/90 dark:text-zinc-100">
-                  {resp.email}
-                </pre>
+                <div className="space-y-3">
+                  {isEditingEmail ? (
+                    <textarea
+                      value={editedEmailContent}
+                      onChange={(e) => setEditedEmailContent(e.target.value)}
+                      className="w-full max-h-80 rounded-xl border border-orange-300 bg-orange-50 p-3 text-xs leading-6 font-mono text-zinc-800 dark:border-orange-600 dark:bg-orange-950/30 dark:text-zinc-100"
+                      rows={12}
+                    />
+                  ) : (
+                    <pre className="max-h-80 overflow-auto whitespace-pre-wrap rounded-xl bg-zinc-50/90 p-3 text-xs leading-6 text-zinc-800 shadow-inner dark:bg-zinc-900/90 dark:text-zinc-100">
+                      {resp.email}
+                    </pre>
+                  )}
+                  
+                  <div className="flex gap-2 flex-wrap">
+                    {!isEditingEmail ? (
+                      <>
+                        <button
+                          onClick={() => {
+                            setIsEditingEmail(true);
+                            setEditedEmailContent(resp.email);
+                          }}
+                          className="inline-flex items-center gap-1 rounded-xl border border-blue-300 bg-blue-50 px-3 py-2 text-xs font-medium text-blue-600 shadow-sm transition hover:bg-blue-100 dark:border-blue-600 dark:bg-blue-950/30 dark:text-blue-400"
+                        >
+                          ✏️ Edit Email
+                        </button>
+                        <button
+                          disabled={sendingEmail || resp.email_delivery_status === "sent"}
+                          onClick={sendEmail}
+                          className="inline-flex items-center gap-1 rounded-xl bg-gradient-to-r from-green-500 to-emerald-500 px-3 py-2 text-xs font-medium text-white shadow-sm transition hover:brightness-110 disabled:cursor-not-allowed disabled:opacity-60"
+                        >
+                          {sendingEmail ? (
+                            <>
+                              <span className="inline-block h-3 w-3 animate-spin rounded-full border-2 border-white/60 border-t-transparent" />
+                              Sending...
+                            </>
+                          ) : resp.email_delivery_status === "sent" ? (
+                            <>
+                              ✅ Sent
+                            </>
+                          ) : (
+                            <>
+                              📨 Send Email
+                            </>
+                          )}
+                        </button>
+                      </>
+                    ) : (
+                      <>
+                        <button
+                          disabled={!editedEmailContent.trim() || sendingEmail}
+                          onClick={sendEmail}
+                          className="inline-flex items-center gap-1 rounded-xl bg-gradient-to-r from-green-500 to-emerald-500 px-3 py-2 text-xs font-medium text-white shadow-sm transition hover:brightness-110 disabled:cursor-not-allowed disabled:opacity-60"
+                        >
+                          {sendingEmail ? (
+                            <>
+                              <span className="inline-block h-3 w-3 animate-spin rounded-full border-2 border-white/60 border-t-transparent" />
+                              Sending...
+                            </>
+                          ) : (
+                            <>
+                              ✅ Send Edited Email
+                            </>
+                          )}
+                        </button>
+                        <button
+                          disabled={sendingEmail}
+                          onClick={() => {
+                            setIsEditingEmail(false);
+                            setEditedEmailContent("");
+                          }}
+                          className="inline-flex items-center gap-1 rounded-xl border border-zinc-300 bg-white px-3 py-2 text-xs font-medium text-zinc-600 shadow-sm transition hover:bg-zinc-50 disabled:cursor-not-allowed dark:border-zinc-600 dark:bg-zinc-900 dark:text-zinc-400"
+                        >
+                          ✕ Cancel
+                        </button>
+                      </>
+                    )}
+                  </div>
+                </div>
               ) : (
                 <p className="text-xs text-zinc-600 dark:text-zinc-400">
                   Once the brief is ready, FireReach will generate a tailored email that explicitly references detected
@@ -377,23 +742,33 @@ export default function Home() {
                   Email Delivery Status
                 </h3>
                 {loading && !resp && (
-                  <span className="text-[10px] text-zinc-500">Sending via Resend…</span>
+                  <span className="text-[10px] text-zinc-500">Sending via SMTP…</span>
                 )}
               </div>
               {resp?.email_delivery_status ? (
-                <p className="text-xs text-zinc-800 dark:text-zinc-200">
-                  <span className="inline-flex items-center rounded-full bg-emerald-500/10 px-2 py-0.5 text-[10px] font-medium text-emerald-500">
-                    {resp.email_delivery_status}
-                  </span>
-                  {resp.email_id && (
-                    <span className="ml-2 text-[11px] text-zinc-500">
-                      ID: <span className="font-mono text-zinc-700 dark:text-zinc-300">{resp.email_id}</span>
+                <>
+                  <p className="text-xs text-zinc-800 dark:text-zinc-200">
+                    <span className={`inline-flex items-center rounded-full px-2 py-0.5 text-[10px] font-medium ${
+                      resp.email_delivery_status === "sent"
+                        ? "bg-emerald-500/10 text-emerald-600 dark:text-emerald-400"
+                        : "bg-yellow-500/10 text-yellow-600 dark:text-yellow-400"
+                    }`}>
+                      {resp.email_delivery_status === "sent" ? "✅ Sent" : "⏳ Ready to Send"}
                     </span>
-                  )}
-                </p>
+                    {resp.email_id && (
+                      <span className="ml-2 text-[11px] text-zinc-500">
+                        ID: <span className="font-mono text-zinc-700 dark:text-zinc-300">{resp.email_id}</span>
+                      </span>
+                    )}
+                  </p>
+                  <p className="mt-2 text-xs text-zinc-500 dark:text-zinc-400">
+                    To: <span className="font-medium text-zinc-700 dark:text-zinc-100">{resp.recipient}</span>
+                    {resp.company_email ? " (guessed company address)" : ""}
+                  </p>
+                </>
               ) : (
                 <p className="text-xs text-zinc-600 dark:text-zinc-400">
-                  When the pipeline completes, FireReach will confirm delivery from the Outreach Sender module.
+                  Once the brief is ready, you can review and send the email using the Edit & Send buttons above.
                 </p>
               )}
             </div>
